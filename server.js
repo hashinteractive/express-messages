@@ -1,10 +1,12 @@
 const express = require('express');
 const app = express();
-const Message = require('./db/Message');
+const db = require('./db/config');
+const { Message, User } = require('./db/models')
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
+/** User Routes **/
 
 app.get('/api/messages', (req, res, next) => {
   Message.find((err, messages) => {
