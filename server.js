@@ -7,38 +7,80 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 /** User Routes **/
-
-app.get('/api/messages', (req, res, next) => {
-  Message.find((err, messages) => {
+app.post('/api/users', (req, res, next) => {
+  const { body: user } = req
+  userInstance = new User(user)
+  userInstance.save((err, u) => {
     if(err){
       next(err)
     }else{
-      res.status(200).json(messages)
+      res.status(201).json(u)
     }
   })
 })
 
-app.post('/api/messages', (req, res, next) => {
+app.get('/api/users', (req, res, next) => {
+  User.find((err, users) => {
+    if(err){
+      next(err)
+    }else{
+      res.status(200).json(users)
+    }
+  })
+})
+
+app.get('/api/users/:id', async (req, res, next) => {
+  const { params: { id } } = req
+  try{
+    const user = await User.findOne({ _id: id })
+    const messages = await Promise.all(user.messages.map(m =>
+      Message.findById(m._id)
+    ))
+    user.messages = messages
+    res.status(200).json(user)
+  }catch(err){
+    next(err)
+  }
+})
+
+/** Message Routes **/
+app.get('/api/messages', async (req, res, next) => {
+  try{
+    let allMessages = await Message.find()
+    let messages = await Promise.all(allMessages.map(m => new Promise(async (resolve, reject) => {
+      let user = await User.findById(m.user)
+      m.user = user
+      resolve(m)
+    }) ))
+    res.status(200).json(messages)
+  }catch(err){
+    next(err)
+  }
+})
+
+app.post('/api/messages', async (req, res, next) => {
   const { body: message } = req
   let messageInstance = new Message(message)
-  messageInstance.save((err, m) => {
-    if(err){
-      next(err)
-    }else{
-      res.status(201).json(m)
-    }
-  })
+  try{
+    const message = await messageInstance.save()
+    const user = await User.findOneAndUpdate({ _id: message.user._id }, { $push: { messages: message._id } }, { new: true })
+    message.user = user
+    res.status(201).json(message)
+  }catch(err){
+    next(err)
+  }
 })
 
-app.get('/api/messages/:id', (req, res, next) => {
+app.get('/api/messages/:id', async (req, res, next) => {
   const { params: { id } } = req
-  Message.findOne({ _id: id }, (err, m) => {
-    if(err){
-      next(err)
-    }else{
-      res.status(200).json(m)
-    }
-  })
+  try{
+    const message = await Message.findById(id)
+    const user = await User.findById(message.user._id)
+    message.user = user
+    res.status(200).json(message)
+  }catch(err){
+    next(err)
+  }
 })
 
 app.patch('/api/messages/:id', (req, res, next) => {
@@ -47,7 +89,10 @@ app.patch('/api/messages/:id', (req, res, next) => {
     if(err){
       next(err)
     }else{
-      res.status(200).json(m)
+      User.findOneAndUpdate({ _id: m.user }, { $push: { messages: m._id } }, { new: true }, (err, u) => {
+        m.user = u
+        res.status(200).json(m)
+      })
     }
   })
 })
