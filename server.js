@@ -1,7 +1,10 @@
+const path = require('path')
 const express = require('express');
 const app = express();
 const db = require('./db/config');
 const { Message, User } = require('./db/models')
+
+app.use(express.static(path.join(__dirname, 'client/dist')))
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -89,23 +92,21 @@ app.patch('/api/messages/:id', (req, res, next) => {
     if(err){
       next(err)
     }else{
-      User.findOneAndUpdate({ _id: m.user }, { $push: { messages: m._id } }, { new: true }, (err, u) => {
-        m.user = u
-        res.status(200).json(m)
-      })
+      res.status(200).json(m)
     }
   })
 })
 
-app.delete('/api/messages/:id', (req, res, next) => {
+app.delete('/api/messages/:id', async (req, res, next) => {
   const { params: { id } } = req
-  Message.findOneAndDelete({ _id: id }, err => {
-    if(err){
-      next(err)
-    }else{
-      res.status(200).json({ id })
-    }
-  }) 
+  try{
+    await Message.findByIdAndDelete(id)
+    //update the messages array on user
+    let user = await User.findOneAndUpdate({ messages: { $in: [id] } }, { $pull: { messages: id } }, { new: true })
+    res.status(200).json(user)
+  }catch(err){
+    next(err)
+  }
 })
 
 //fallback route
